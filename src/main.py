@@ -1,4 +1,5 @@
 import sys
+from array import array
 
 
 def read_lines(filename):
@@ -46,13 +47,18 @@ def myers_diff(a, b):
 
     # V[k] stores the furthest x-coordinate reached
     # on diagonal k.
-    v = [0] * (2 * max_d + 1)
+    v = array("i", [0]) * (2 * max_d + 1)
 
-    # Save the V arrays needed for backtracking.
-    history = []
+    # Save only what backtracking needs: before round d, the values
+    # of V on diagonals -(d-1), -(d-3), ..., d-1 (the ones of the
+    # previous round), stored compactly as 4-byte integers.
+    history = [None]
 
     for d in range(max_d + 1):
-        history.append(v[:])
+        if d > 0:
+            history.append(
+                v[offset - d + 1:offset + d:2]
+            )
 
         for k in range(-d, d + 1, 2):
 
@@ -142,24 +148,26 @@ def build_script(history, a, b, d, offset):
 
     for current_d in range(d, 0, -1):
 
-        v = history[current_d]
+        snapshot = history[current_d]
+        base = current_d - 1
 
         k = x - y
-        index = k + offset
 
+        # snapshot[(diagonal + base) // 2] is V[diagonal] before round d.
         if k == -current_d:
             previous_k = k + 1
 
         elif k == current_d:
             previous_k = k - 1
 
-        elif v[index - 1] < v[index + 1]:
+        elif (snapshot[(k - 1 + base) // 2]
+              < snapshot[(k + 1 + base) // 2]):
             previous_k = k + 1
 
         else:
             previous_k = k - 1
 
-        previous_x = v[previous_k + offset]
+        previous_x = snapshot[(previous_k + base) // 2]
         previous_y = previous_x - previous_k
 
         # Follow the matching sequence backwards.
@@ -198,14 +206,14 @@ def build_script(history, a, b, d, offset):
 
 
 def print_diff(operations, highlight):
-    output = []
+    write = sys.stdout.buffer.write
     i = 0
 
     while i < len(operations):
 
         # Normal unchanged line.
         if operations[i][0] == "keep":
-            output.append(b" " + operations[i][1] + b"\n")
+            write(b" " + operations[i][1] + b"\n")
             i += 1
             continue
 
@@ -225,13 +233,13 @@ def print_diff(operations, highlight):
 
         # Print all deleted lines first.
         for line in deleted:
-            output.append(b"-" + line + b"\n")
+            write(b"-" + line + b"\n")
 
         # Print inserted lines.
         pairs = min(len(deleted), len(inserted))
 
         for j, line in enumerate(inserted):
-            output.append(b"+" + line + b"\n")
+            write(b"+" + line + b"\n")
 
             # Part B: print character ranges for paired lines.
             if highlight and j < pairs:
@@ -257,9 +265,7 @@ def print_diff(operations, highlight):
                     f"? {old_ranges} | {new_ranges}\n"
                 )
 
-                output.append(range_line.encode("utf-8"))
-
-    sys.stdout.buffer.write(b"".join(output))
+                write(range_line.encode("utf-8"))
 
 
 def main():
